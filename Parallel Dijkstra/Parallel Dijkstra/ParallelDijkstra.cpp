@@ -67,18 +67,18 @@ void parallel_dijkstra(int id, int dist[V], int prev[V])
 		// Wait for incoming events (from other nodes) and receive them
 		{
 			// - TODO 6-a: lock this thread mutex to protect access to global data
-			std::unique_lock<std::mutex> lock(mutexes[id]);
+			std::unique_lock<std::mutex> lock(mutexes[u]);
 
 			if (messages[u].empty())
 			{
 				// TODO 6-b: wait for a message from another node
-				event[id].wait(lock);
+				event[u].wait(lock);
 			}
 
 			// TODO 6-c: check if 'shouldFinish' is true to finish this thread
 			if (shouldFinish)
 			{
-				threads[id].join();
+				return;
 			}
 
 			// Get the incoming message
@@ -113,7 +113,8 @@ void parallel_dijkstra(int id, int dist[V], int prev[V])
 		// TODO 7: Create a message for the neigbouring nodes
 		// - the message needs to contain the information about this thread's node
 		Message new_message;
-		new_message.sender = id;
+		new_message.dist = dist[u];
+		new_message.sender = prev[u];
 
 		// Send messages to neighbour nodes to update their state
 		for (int v = 0; v < V; ++v)
@@ -121,7 +122,7 @@ void parallel_dijkstra(int id, int dist[V], int prev[V])
 			int edge_dist = G[u][v];
 			if (edge_dist != Inf)
 			{
-				new_message.dist = edge_dist;
+				//new_message.dist = edge_dist;
 				// TODO 8: Send the message to the neighbor
 				// - lock the neighbor's mutex
 				std::unique_lock<std::mutex> lock(mutexes[v]);
@@ -173,7 +174,7 @@ int main(int argc, char **argv)
 		// - create a thread for each node store them in the global array 'threads'
 		// - make them execute the 'parallel_dijkstra' function
 		// - pass each thread their id, and the two arrays 'dist' and 'prev'
-		threads.push_back(std::thread(parallel_dijkstra, i, dist, prev));
+		threads[i] = std::thread(parallel_dijkstra, i, dist, prev);
 	}
 
 
@@ -201,11 +202,10 @@ int main(int argc, char **argv)
 	{
 		// - protect each node critical section (locking their mutex)
 		std::unique_lock<std::mutex> lock(mutexes[i]);
-		//locks(lock);
 		// - set the global 'shouldFinish' to true
 		shouldFinish = true;
 		// - notify the thread that an event occurred
-		event[i].notify_one();
+		event[i].notify_all();
 	}
 
 
@@ -213,15 +213,8 @@ int main(int argc, char **argv)
 	for (int i = 0; i < V; ++i)
 	{
 		// - wait for all threads to finish using thread::join()
-		/*std::unique_lock<std::mutex> lock(mutexes[i]);
-		while (!shouldFinish)
-		{
-			event[i].wait(lock);
-		}*/
-		threads[i].join(); //Crash on join ^_^
+		threads[i].join();
 	}
-
-	//locks.clear();
 
 	// print results
 	printPaths(prev);
